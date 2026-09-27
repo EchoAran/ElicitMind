@@ -1,9 +1,9 @@
-from .scaffold_generator import ScaffoldGenerator
+from .framework_generator import FrameworkGenerator
 from .prefiller import ProjectPrefiller
 from .dependency_builder import DependencyBuilder
 
 __all__ = [
-    "ScaffoldGenerator",
+    "FrameworkGenerator",
     "ProjectPrefiller",
     "DependencyBuilder",
 ]

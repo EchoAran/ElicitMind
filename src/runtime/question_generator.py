@@ -90,9 +90,11 @@ class QuestionGenerator:
                 if reason == "uncertain_value":
                     reason_text = "The recorded value is tentative or subject to confirmation. Inquire to clarify the final rule or confirm that it remains pending."
                 elif reason == "added_slot_needs_clarification":
-                    reason_text = "This item was newly introduced in a single turn. Clarify its concrete applicable conditions, scope, or provide concise confirmation."
+                    reason_text = "This item was newly introduced. Inquire forward into its concrete operational rules, applicable conditions, or boundary exceptions; do NOT ask meta-confirmation questions (e.g. whether it is finalized or tentative) unless the interviewee explicitly indicates inability to decide."
                 elif reason == "clarify_or_defer":
                     reason_text = "The previous inquiry did not resolve this specific gap. Explicitly ask the interviewee whether they want to supply this missing detail now or record it as undecided / tentative for now."
+                elif reason in ("unaddressed_detail_slot", "detail_elaboration"):
+                    reason_text = "This detail aspect (condition, exception, fallback, or boundary) is not yet explored. Inquire whether specific business rules or operational behaviors apply, treating established facts as context without asserting that an exception or rule already exists."
                 else:
                     reason_text = "Probe deeper into concrete operational boundaries or conditions for this item."
 
@@ -191,7 +193,9 @@ class QuestionGenerator:
         """Builds prompt strictly from QuestionGenerationInput, without bypassing through state and without technical IDs."""
         plan = input_data.plan
         strat = plan.strategy
-        inst = STRATEGY_INSTRUCTIONS.get(strat, STRATEGY_INSTRUCTIONS["fill_gap"])
+        if strat not in STRATEGY_INSTRUCTIONS:
+            raise ValueError(f"Unknown question strategy: {strat!r}")
+        inst = STRATEGY_INSTRUCTIONS[strat]
 
         target_text, evidence_text = self._format_target_and_evidence(input_data)
 
@@ -282,7 +286,9 @@ class QuestionGenerator:
         # 1. Prompt Construction and Context Budgeting
         try:
             target_text, evidence_text = self._format_target_and_evidence(input_data)
-            inst = STRATEGY_INSTRUCTIONS.get(plan.strategy, STRATEGY_INSTRUCTIONS["fill_gap"])
+            if plan.strategy not in STRATEGY_INSTRUCTIONS:
+                raise ValueError(f"Unknown question strategy: {plan.strategy!r}")
+            inst = STRATEGY_INSTRUCTIONS[plan.strategy]
             template = self._load_template()
 
             budget_res = self.budget_manager.apply_budget(

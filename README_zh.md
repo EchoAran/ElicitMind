@@ -35,7 +35,7 @@
 - 🎯 **不可变事件溯源（Event Sourcing）**：所有业务状态变更（槽位创建/填充/冲突修订、主题状态流转、依赖建立等）均由原子状态事件（`StateEvent`）驱动。通过纯函数 `StateReducer` 进行推演，支持从零事件流 100% 确定性回放与状态重建。
 - 🔗 **全流程结构化证据链（Evidence Traceability）**：受访者的每次有效陈述均转换为不可变的证据引用（`EvidenceRef`），槽位版本（`SlotRevision`）严格关联支撑证据，确保导出的每条需求事实均有据可查。
 - 🧭 **意图控制与多因素动态调度（Intent & 7-Factor Scheduling）**：支持受访者主动拒绝、切换话题或提前结项；结合初始先验、依赖就绪度、缺口率、冲突信号、话题涌现度、上下文连续性与用户关联度进行全局最优化主题调度。
-- 💡 **六维提问策略规划（Strategy-guided Elicitation）**：解耦“聊什么”（调度目标）与“怎么问”（提问策略），针对探索、填空、深挖、化解冲突、闭环确认与意图核验等六大情境实施针对性提问规划。
+- 💡 **五维运行时策略规划（Strategy-guided Elicitation）**：解耦“聊什么”（调度目标）与“怎么问”（提问策略），针对探索、填空、深挖、化解冲突与意图核验等五大运行时情境实施针对性提问规划。
 - 🛡️ **严格上下文预算与明确失败暴露（Budgeting & Failure Exposure）**：13 隔离区块结构化 Prompt 契约，结合 P7~P4 优先级梯度载荷裁剪。在模型调用异常、输出为空或预算超限时，立即停止推进并暴露错误，不使用 fallback 掩盖错误，不污染未完成轮次状态。
 - 🔒 **15 项全局状态不变量（State Invariant Guardrails）**：建立强类型业务门禁，杜绝孤儿槽位、跨主题数据泄漏、多活动主题等非法状态。
 
@@ -47,7 +47,7 @@
 
 ```mermaid
 flowchart TD
-    A[用户原始需求 / 初始描述] -->|Pipeline.initialize| B[初始框架生成 ScaffoldGenerator]
+    A[用户原始需求 / 初始描述] -->|Pipeline.initialize| B[初始框架生成 FrameworkGenerator]
     B --> C[初始槽位预填 ProjectPrefiller]
     C --> D[依赖关系构建 DependencyBuilder]
     D --> E[(基线状态 state.initial.json)]
@@ -129,7 +129,7 @@ semi_structured_interview_fse/
 │   │   ├── validators.py           # 15 项全局状态不变量检验门禁
 │   │   └── summary_generator.py    # 结项 Markdown 需求规格生成器
 │   ├── initialization/             # 初始化子域
-│   │   ├── scaffold_generator.py   # 大纲与章节结构初始化
+│   │   ├── framework_generator.py  # 大纲与章节结构初始化
 │   │   ├── prefiller.py            # 初始信息提取与槽位预填
 │   │   └── dependency_builder.py   # 主题依赖拓扑构建与先验排序
 │   └── runtime/                    # 运行时交互与推理子域
@@ -311,14 +311,15 @@ $$\text{Score}(T) = w_1 \cdot \text{Prior} + w_2 \cdot \text{DepReadiness} + w_3
 - **Continuity（会话连续性）**：维持当前探讨主题的顺畅度加分；
 - **UserRelevance（用户相关度）**：受访者最新发言中主动提及该主题时的相关度加分。
 
-### 6.3 六维提问策略与 Prompt 隔离
+### 6.3 提问策略与 Prompt 隔离
 `StrategySelector` 依据状态信号产出高层决策计划，指导 `QuestionGenerator` 构造提问：
-1. `explore`（初始探索）：主题首次进入时，采用开放式提问引导用户自由概述；
-2. `fill_gap`（缺口填补）：聚焦 1~2 个关键必填空缺槽位进行精准定向追问；
-3. `deepen`（深度挖掘）：针对不确定槽位或复杂业务分支深入澄清异常与边界条件；
+1. `explore`（初始探索/重访）：主题首次激活或受访者请求重访时，采用开放式提问引导受访者自由阐述；
+2. `fill_gap`（缺口填补）：聚焦缺失访谈证据的未解决必填核心槽位进行定向追问；
+3. `deepen`（深度挖掘）：针对不确定槽位、动态新增槽位或未决细节槽位深入澄清异常与边界条件；
 4. `resolve_conflict`（冲突化解）：客观呈现已记录的矛盾点，引导受访者确认基准规则；
-5. `verify`（闭环确认）：概要总结当前主题已确定的需求点，确认完备性后准备平滑过渡；
-6. `confirm_control`（意图核验）：受访者发出控制意图但置信度不足时，主动向用户发起确认。
+5. `confirm_control`（意图核验）：受访者发出控制意图但置信度不足时，主动向用户发起确认。
+
+*（注：主题完结完全由事实与访谈证据驱动——当所有必填核心槽位均获访谈证据且无冲突/深化目标时自动收束，无需经历人工摘要确认循环）*。
 
 Prompt 模板采用 **13 个严格语义区块隔离设计**，隔离系统指令、当前聚焦目标（TargetContext）、跨主题已知事实（Known Info）、历史对话上下文与输出约束，有效杜绝模型偏题与指令泄漏。
 

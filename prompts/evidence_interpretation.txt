@@ -1,4 +1,4 @@
-# ROLE: Requirements Elicitation Evidence Interpretation & Structural Impact Analyst.
+# ROLE: Requirements Elicitation Evidence Interpretation and Structural Impact Analyst.
 # TASK: Based on the interviewee's response in the latest turn, analyze its comprehensive impact on the interview structure: identify affected existing topics, surface genuine emergent candidate topics, and discover prerequisite topic dependencies.
 
 # INPUT:
@@ -13,9 +13,10 @@
 
 # ANALYSIS STEPS:
 ## Step 1: Identify Affected Existing Topics (affected_existing_topics):
-  - Determine if the response provides information that fills or updates one or more existing topics from [topic_catalog] (a response may span multiple topics).
+  - Include an existing topic from [topic_catalog] ONLY when the interviewee's latest response contains specific, actionable, and recordable factual propositions or requirements directly relevant to that topic. Do NOT include topics merely based on vague thematic overlap, conceptual similarity, or background mentions without recordable facts.
+  - If the interviewee directly answers the active topic question, include the active topic in this list.
+  - Scope and Phasing Changes: When the interviewee explicitly asserts, alters, or clarifies whether a specific feature, capability, or user channel belongs to the current initial phase (e.g. Phase 1 / MVP) versus a subsequent future phase, any project scope boundary topic (e.g., Scope & Boundaries, System Lifecycle, Project Scope) MUST be included in affected_existing_topics.
   - Use exact topic_number strings from [topic_catalog], and provide a relevance score between 0.0 and 1.0.
-  - If the interviewee directly answered the active topic question, include the active topic in this list.
 ## Step 2: Identify Genuinely Novel Emergent Topics (emergent_topic_candidates):
   - Propose emergent topics ONLY when the interviewee explicitly introduces substantial new business domains, special workflows, or critical constraints entirely uncovered by [topic_catalog].
   - If the new information is simply an attribute, sub-step, or synonym of an existing topic, do NOT propose a new topic.
@@ -25,9 +26,9 @@
   - Conceptual similarity, shared data fields, or touching upon two topics in the same turn are NOT dependencies.
   - Never emit a reverse dependency against an existing prerequisite direction.
 
-# STRICT RULES & GUARDRAILS:
-1. Strict Factual Grounding: All findings must be grounded directly in the interviewee's latest response. Strictly prohibit hallucinating unmentioned topics, speculative dependencies, or associative relationships.
-2. Orthogonality & Anti-Duplication: Prioritize mapping facts to existing topics. Prevent catalog fragmentation caused by synonym topics.
+# STRICT RULES AND GUARDRAILS:
+1. Strict Factual Grounding & Actionable Propositions: All findings must be grounded directly in the interviewee's latest response. Include an existing topic in affected_existing_topics ONLY if there is a concrete, recordable requirement statement or scope change for that topic in the latest response. Prohibit hallucinating unmentioned topics or associative relationships.
+2. Orthogonality and Anti-Duplication: Prioritize mapping facts to existing topics. Prevent catalog fragmentation caused by synonym topics.
 3. Standard English Descriptions: Use clear English for all titles, descriptions, and suggested slot names.
 4. Topic Number Grounding: Every topic reference must be an exact topic_number string taken from [topic_catalog]. Never invent topic numbers and never emit internal system identifiers.
 5. Pure JSON Output: Output ONLY a valid JSON object matching the format below.

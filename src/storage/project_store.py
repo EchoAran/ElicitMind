@@ -1,7 +1,7 @@
 import json
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Union
 from llm.schemas import LLMCallRecord
 from models.event import EvidenceRef, StateEvent
 from models.run_record import RunError, UnifiedDecisionRecord
@@ -215,9 +215,12 @@ class ProjectStore:
                     decisions.append(UnifiedDecisionRecord(**json.loads(stripped)))
         return decisions
 
-    def append_llm_call(self, project_id: str, record: LLMCallRecord) -> None:
+    def append_llm_call(self, project_id: str, record: Union[LLMCallRecord, dict[str, Any]]) -> None:
         p_dir = self.get_project_dir(project_id)
         p_dir.mkdir(parents=True, exist_ok=True)
+
+        if isinstance(record, dict):
+            record = LLMCallRecord(**record)
 
         calls_file = p_dir / "llm_calls.jsonl"
         with open(calls_file, "a", encoding="utf-8") as f:

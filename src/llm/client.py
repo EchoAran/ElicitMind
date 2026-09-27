@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import json
 import re
 import time
@@ -9,11 +10,54 @@ from pydantic import BaseModel
 
 from config import ModelConfig
 from models.run_record import RunError
+from services.context_budget_manager import estimate_tokens
 from .adapters import normalize_messages
 from .exceptions import LLMConfigurationError, LLMOutputError, LLMTransportError
 from .schemas import LLMCallRecord
 
 T = TypeVar("T", bound=BaseModel)
+
+_last_call_stats: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar("_last_call_stats", default={})
+
+
+def extract_token_usage(
+    result: dict[str, Any],
+    prompt_text: str = "",
+    response_text: str = "",
+) -> dict[str, int]:
+    """Extracts token usage metrics from an API response, falling back to estimation if omitted."""
+    usage = result.get("usage") or result.get("usage_metadata") or {}
+
+    prompt_tokens = (
+        usage.get("prompt_tokens")
+        or usage.get("input_tokens")
+        or usage.get("prompt_token_count")
+        or 0
+    )
+    completion_tokens = (
+        usage.get("completion_tokens")
+        or usage.get("output_tokens")
+        or usage.get("candidates_token_count")
+        or 0
+    )
+    total_tokens = (
+        usage.get("total_tokens")
+        or usage.get("total_token_count")
+        or (prompt_tokens + completion_tokens)
+    )
+
+    if prompt_tokens == 0 and prompt_text:
+        prompt_tokens = estimate_tokens(prompt_text)
+    if completion_tokens == 0 and response_text:
+        completion_tokens = estimate_tokens(response_text)
+    if total_tokens == 0:
+        total_tokens = prompt_tokens + completion_tokens
+
+    return {
+        "prompt_tokens": int(prompt_tokens),
+        "completion_tokens": int(completion_tokens),
+        "total_tokens": int(total_tokens),
+    }
 
 
 def extract_json_str(raw: str) -> str:
@@ -152,6 +196,15 @@ class LLMClient:
                         if not content:
                             raise LLMOutputError("LLM returned empty or whitespace response.")
                         latency_ms = (time.perf_counter() - start_time) * 1000.0
+                        full_prompt_text = prompt + (f"\n{query}" if query else "")
+                        token_stats = extract_token_usage(result, prompt_text=full_prompt_text, response_text=content)
+
+                        call_stats = {
+                            "latency_ms": latency_ms,
+                            "response_time_ms": latency_ms,
+                            **token_stats,
+                        }
+                        _last_call_stats.set(call_stats)
 
                         if record_completed and self.on_call_completed:
                             record = LLMCallRecord(
@@ -167,6 +220,10 @@ class LLMClient:
                                 raw_response=content,
                                 parsed_response=None,
                                 latency_ms=latency_ms,
+                                response_time_ms=latency_ms,
+                                prompt_tokens=token_stats["prompt_tokens"],
+                                completion_tokens=token_stats["completion_tokens"],
+                                total_tokens=token_stats["total_tokens"],
                                 status="ok",
                                 metadata=kwargs.get("metadata", {}),
                             )
@@ -192,6 +249,8 @@ class LLMClient:
                 await asyncio.sleep(base_delay * (2 ** attempt))
 
         latency_ms = (time.perf_counter() - start_time) * 1000.0
+        full_prompt_text = prompt + (f"\n{query}" if query else "")
+        prompt_tokens = estimate_tokens(full_prompt_text)
         if self.on_call_completed:
             err_record = LLMCallRecord(
                 call_id=call_id,
@@ -206,6 +265,10 @@ class LLMClient:
                 raw_response=None,
                 parsed_response=None,
                 latency_ms=latency_ms,
+                response_time_ms=latency_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=0,
+                total_tokens=prompt_tokens,
                 status="error",
                 error_message=str(last_exception),
                 metadata=kwargs.get("metadata", {}),
@@ -256,6 +319,12 @@ class LLMClient:
             **kwargs,
         )
 
+        stats = _last_call_stats.get()
+        full_prompt_text = prompt + (f"\n{query}" if query else "")
+        prompt_tokens = stats.get("prompt_tokens") or estimate_tokens(full_prompt_text)
+        completion_tokens = stats.get("completion_tokens") or estimate_tokens(raw)
+        total_tokens = stats.get("total_tokens") or (prompt_tokens + completion_tokens)
+
         json_str = extract_json_str(raw)
         try:
             parsed = json.loads(json_str)
@@ -275,7 +344,12 @@ class LLMClient:
                     raw_response=raw,
                     parsed_response=parsed,
                     latency_ms=latency_ms,
+                    response_time_ms=latency_ms,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
                     status="ok",
+                    metadata=kwargs.get("metadata", {}),
                 )
                 self.on_call_completed(record)
 
@@ -296,8 +370,13 @@ class LLMClient:
                     raw_response=raw,
                     parsed_response=None,
                     latency_ms=latency_ms,
+                    response_time_ms=latency_ms,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
                     status="error",
                     error_message=f"JSON parse error: {str(e)}",
+                    metadata=kwargs.get("metadata", {}),
                 )
                 self.on_call_completed(record)
 

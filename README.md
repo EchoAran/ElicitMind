@@ -35,7 +35,7 @@ Traditional LLM-based interview systems suffer from **factual hallucination**, *
 - 🎯 **Immutable Event Sourcing**: Every state transition (slot creation, refinement, conflict revision, topic lifecycle change, dependency addition) is modeled as a strongly typed atomic `StateEvent`. The pure-function `StateReducer` enables 100% deterministic state reconstruction from disk event logs.
 - 🔗 **Full-Lifecycle Evidence Traceability**: Interviewee statements are captured as immutable `EvidenceRef` records. All slot revisions (`SlotRevision`) explicitly reference supporting evidence, ensuring that every extracted requirement fact is fully auditable.
 - 🧭 **Intent Control & 7-Factor Scheduling**: Handles explicit user conversational control (topic switching, topic refusal, backtracking, early termination) with confidence thresholds; dynamically evaluates candidate topics across 7 factors (prior, readiness, gap, conflict, emergence, continuity, relevance) for optimal focus.
-- 💡 **Strategy-Guided Question Planning**: Decouples *what to discuss* (scheduler target) from *how to ask* (question strategy), planning targeted inquiries across six strategies: `explore`, `fill_gap`, `deepen`, `resolve_conflict`, `verify`, and `confirm_control`.
+- 💡 **Strategy-Guided Question Planning**: Decouples *what to discuss* (scheduler target) from *how to ask* (question strategy), planning targeted inquiries across five runtime strategies: `explore`, `fill_gap`, `deepen`, `resolve_conflict`, and `confirm_control`.
 - 🛡️ **Strict Context Budgeting & Failure Exposure**: Employs a 13-block isolated prompt contract with P7~P4 priority-based progressive context trimming. If budget is exceeded or model calls fail after retries, the engine immediately halts progression and exposes the error without masking failures or committing incomplete state.
 - 🔒 **15 State Invariant Guardrails**: Formal business validation rules eliminate orphan slots, cross-topic data leaks, invalid state transitions, and dangling dependencies.
 
@@ -47,7 +47,7 @@ The interview lifecycle is orchestrated by `ElicitationPipeline`, encompassing *
 
 ```mermaid
 flowchart TD
-    A[Initial Requirement / Initial Description] -->|Pipeline.initialize| B[ScaffoldGenerator]
+    A[Initial Requirement / Initial Description] -->|Pipeline.initialize| B[FrameworkGenerator]
     B --> C[ProjectPrefiller]
     C --> D[DependencyBuilder]
     D --> E[(Baseline state.initial.json)]
@@ -91,7 +91,7 @@ semi_structured_interview_fse/
 ├── docs/
 │   └── configuration.md                # Comprehensive configuration guide & tuning reference
 ├── prompts/                            # System prompt templates
-│   ├── framework_generation.txt        # Initial scaffold generation
+│   ├── framework_generation.txt        # Initial framework generation
 │   ├── initial_slots_filling.txt       # Initial slot prefilling
 │   ├── topic_dependency.txt            # Initial dependency identification
 │   ├── intent_detection.txt            # User control intent detection
@@ -129,7 +129,7 @@ semi_structured_interview_fse/
 │   │   ├── validators.py           # 15 Global state invariant validators
 │   │   └── summary_generator.py    # Final Markdown requirements specification exporter
 │   ├── initialization/             # Initialization domain
-│   │   ├── scaffold_generator.py   # Outline & section generator
+│   │   ├── framework_generator.py  # Outline & section generator
 │   │   ├── prefiller.py            # Initial slot prefiller
 │   │   └── dependency_builder.py   # Initial topological dependency builder
 │   └── runtime/                    # Runtime interaction & reasoning domain
@@ -311,14 +311,15 @@ $$\text{Score}(T) = w_1 \cdot \text{Prior} + w_2 \cdot \text{DepReadiness} + w_3
 - **Continuity**: Momentum bonus to keep discussions focused on active topics;
 - **UserRelevance**: Semantic relevance to the interviewee's latest response.
 
-### 6.3 Six-Dimension Strategy Planning & Isolated Prompting
+### 6.3 Strategy Planning & Isolated Prompting
 `StrategySelector` determines the conversational objective for `QuestionGenerator`:
-1. `explore`: Open-ended discovery when a topic is first activated;
-2. `fill_gap`: Targeted inquiry targeting 1~2 empty mandatory slots;
-3. `deepen`: Elaborates edge cases and boundaries when answers are shallow;
+1. `explore`: Open-ended discovery when a topic is activated or revisited by user request;
+2. `fill_gap`: Targeted inquiry targeting unresolved core slots lacking interview evidence;
+3. `deepen`: Elaborates edge cases, clarifies uncertain values, or probes unaddressed detail slots;
 4. `resolve_conflict`: Objectively highlights contradictory facts to establish ground truth;
-5. `verify`: Summarizes extracted requirements for final confirmation before topic completion;
-6. `confirm_control`: Seeks explicit confirmation when user control intent has borderline confidence.
+5. `confirm_control`: Seeks explicit confirmation when user control intent has borderline confidence.
+
+*(Note: Topic completion is strictly evidence-driven—a topic naturally completes when all required slots are satisfied with interview evidence, without artificial summary confirmation loops).*
 
 Prompts use **13 strictly isolated semantic blocks**, preventing system instructions from leaking and stopping hallucinated cross-topic assumptions.
 

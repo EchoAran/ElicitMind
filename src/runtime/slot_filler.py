@@ -80,15 +80,25 @@ class SlotFiller:
         else:
             target_context_str = "None"
 
-        entire_info = self._build_entire_interview_info_slots(state)
+        # Ground extraction in the current turn's interviewer question and interviewee response
+        latest_turn = conversation_record[-1] if conversation_record else {}
+        interviewer_question = str(latest_turn.get("Interviewer") or latest_turn.get("interviewer") or "")
+        interviewee_answer = str(latest_turn.get("Interviewee") or latest_turn.get("interviewee") or "")
+
+        current_turn_record = [
+            {"Interviewer": interviewer_question, "Interviewee": interviewee_answer}
+        ]
+
         template = self._load_template()
         prompt = render_prompt(
             template,
             {
                 "{current_topic_content}": str(target_topic.topic_content),
-                "{current_topic_conversation_record}": json.dumps(conversation_record, ensure_ascii=False),
+                "{interviewer_question}": interviewer_question,
+                "{interviewee_answer}": interviewee_answer,
                 "{current_topic_info_slots}": json.dumps(current_slots_data, ensure_ascii=False),
-                "{entire_interview_info_slots}": json.dumps(entire_info, ensure_ascii=False),
+                "{current_topic_conversation_record}": json.dumps(current_turn_record, ensure_ascii=False),
+                "{entire_interview_info_slots}": "{}",
                 "{target_context}": target_context_str,
             }
         )
@@ -107,110 +117,147 @@ class SlotFiller:
         }
 
         for attempt in range(2):
-            if not isinstance(raw_result, list):
-                raise LLMOutputError(f"SlotFiller expected a JSON array, got {type(raw_result).__name__}")
+            try:
+                if not isinstance(raw_result, list):
+                    raise LLMOutputError(f"SlotFiller expected a JSON array, got {type(raw_result).__name__}")
 
-            proposals: list[dict[str, Any]] = []
-            seen_proposal_keys: set[str] = set()
-            duplicate_slots: set[str] = set()
-            for item_index, item in enumerate(raw_result):
-                if not isinstance(item, dict):
-                    raise LLMOutputError(f"Each item in SlotFiller array must be a JSON object, got {type(item).__name__}")
-                if "operation" not in item:
-                    raise LLMOutputError("Slot proposal must contain 'operation'")
-                proposed_op = str(item.get("operation", "")).strip().lower()
-                if proposed_op not in VALID_SLOT_OPERATIONS:
-                    raise LLMOutputError(
-                        f"Slot proposal invalid operation '{proposed_op}', must be one of {sorted(VALID_SLOT_OPERATIONS)}"
+                proposals: list[dict[str, Any]] = []
+                seen_proposal_keys: set[str] = set()
+                duplicate_slots: set[str] = set()
+                for item_index, item in enumerate(raw_result):
+                    if not isinstance(item, dict):
+                        raise LLMOutputError(f"Each item in SlotFiller array must be a JSON object, got {type(item).__name__}")
+                    if "operation" not in item:
+                        raise LLMOutputError("Slot proposal must contain 'operation'")
+                    proposed_op = str(item.get("operation", "")).strip().lower()
+                    if proposed_op not in VALID_SLOT_OPERATIONS:
+                        raise LLMOutputError(
+                            f"Slot proposal invalid operation '{proposed_op}', must be one of {sorted(VALID_SLOT_OPERATIONS)}"
+                        )
+                    if "slot_value" not in item:
+                        raise LLMOutputError("Slot proposal must contain 'slot_value'")
+                    s_num_raw = item.get("slot_number")
+                    s_num = s_num_raw.strip() if isinstance(s_num_raw, str) else ""
+                    s_key_raw = item.get("slot_key")
+                    s_key = s_key_raw.strip() if isinstance(s_key_raw, str) and s_key_raw.strip() else None
+                    s_val_raw = item.get("slot_value")
+
+                    if s_val_raw is None:
+                        val = None
+                    elif isinstance(s_val_raw, (list, dict)):
+                        val = json.dumps(s_val_raw, ensure_ascii=False)
+                    elif isinstance(s_val_raw, str) and s_val_raw.strip():
+                        val = s_val_raw.strip()
+                    else:
+                        raise LLMOutputError(
+                            f"Slot proposal for '{s_num or s_key}' must provide a non-empty 'slot_value' string, array, object, or explicit null"
+                        )
+
+                    # A null slot_value is only meaningful for an explicit deferral
+                    if val is None and proposed_op != "defer_uncertain":
+                        raise LLMOutputError(
+                            f"Slot proposal for '{s_num or s_key}' must not have an empty slot_value unless operation is 'defer_uncertain'"
+                        )
+
+                    # Determine target slot identity and validate contract
+                    existing_slot = None
+                    if s_num:
+                        existing_slot = target_topic.find_slot_by_number(s_num)
+                        if not existing_slot:
+                            if foreign_slot_keys.get(s_num) == s_key:
+                                continue
+                            raise LLMOutputError(
+                                f"Slot proposal #{item_index} with operation '{proposed_op}' references non-existent slot_number '{s_num}'"
+                            )
+                        if proposed_op == "add":
+                            raise LLMOutputError(
+                                f"Slot proposal #{item_index} with operation 'add' must have slot_number null, got '{s_num}'"
+                            )
+                        if s_key and s_key.strip().lower() != existing_slot.key.strip().lower():
+                            raise LLMOutputError(
+                                f"Slot proposal contract violation: slot_number '{s_num}' has key '{existing_slot.key}', "
+                                f"but proposed slot_key is '{s_key}'"
+                            )
+                        proposal_key = f"existing:{existing_slot.slot_id}"
+                        slot_label = existing_slot.slot_number
+                    else:
+                        if not s_key:
+                            raise LLMOutputError(
+                                f"Slot proposal #{item_index} with operation '{proposed_op}' must provide slot_number or slot_key"
+                            )
+                        matched = [s for s in target_topic.slots if s.key.strip().lower() == s_key.strip().lower()]
+                        if matched:
+                            existing_slot = matched[0]
+                            if proposed_op == "add":
+                                raise LLMOutputError(
+                                    f"Slot proposal #{item_index} with operation 'add' cannot duplicate existing slot_key '{s_key}'"
+                                )
+                            s_num = existing_slot.slot_number
+                            proposal_key = f"existing:{existing_slot.slot_id}"
+                            slot_label = existing_slot.slot_number
+                        else:
+                            # Genuine new attribute
+                            if proposed_op in ("update", "refine", "conflict"):
+                                raise LLMOutputError(
+                                    f"Slot proposal #{item_index} with operation '{proposed_op}' cannot find existing slot '{s_key}' in target topic"
+                                )
+                            existing_slot = None
+                            s_num = ""
+                            proposal_key = f"new-key:{s_key.strip().lower()}"
+                            slot_label = s_key
+
+                    if proposal_key in seen_proposal_keys:
+                        duplicate_slots.add(slot_label)
+                    seen_proposal_keys.add(proposal_key)
+                    proposals.append(
+                        {
+                            "slot_number": s_num,
+                            "slot_key": s_key,
+                            "existing_slot": existing_slot,
+                            "value": val,
+                            "operation": proposed_op,
+                        }
                     )
-                if "slot_value" not in item:
-                    raise LLMOutputError("Slot proposal must contain 'slot_value'")
-                s_num_raw = item.get("slot_number")
-                s_num = s_num_raw.strip() if isinstance(s_num_raw, str) else ""
-                s_key_raw = item.get("slot_key")
-                s_key = s_key_raw.strip() if isinstance(s_key_raw, str) and s_key_raw.strip() else None
-                s_val_raw = item.get("slot_value")
 
-                if s_val_raw is None:
-                    val = None
-                elif isinstance(s_val_raw, (list, dict)):
-                    val = json.dumps(s_val_raw, ensure_ascii=False)
-                elif isinstance(s_val_raw, str) and s_val_raw.strip():
-                    val = s_val_raw.strip()
-                else:
+                if duplicate_slots:
                     raise LLMOutputError(
-                        f"Slot proposal for '{s_num or s_key}' must provide a non-empty 'slot_value' string, array, object, or explicit null"
+                        "SlotFiller returned multiple proposals for the same slot after retry: "
+                        + ", ".join(sorted(duplicate_slots))
+                        if attempt == 1 else
+                        "SlotFiller returned multiple proposals for the same slot: "
+                        + ", ".join(sorted(duplicate_slots))
                     )
 
-                # A null slot_value is only meaningful for an explicit deferral
-                if val is None and proposed_op != "defer_uncertain":
-                    raise LLMOutputError(
-                        f"Slot proposal for '{s_num or s_key}' must not have an empty slot_value unless operation is 'defer_uncertain'"
-                    )
-
-                existing_slot = target_topic.find_slot_by_number(s_num) if s_num else None
-                if not existing_slot and s_key:
-                    for s in target_topic.slots:
-                        if s.key == s_key:
-                            existing_slot = s
-                            s_num = s.slot_number
-                            break
-
-                if not existing_slot and s_num:
-                    # A slot_number is only meaningful inside its owning topic: a number taken from
-                    # [other_topics_summary] either restates a slot that the owning topic fills on its
-                    # own fill call (drop it) or is an unreliable label for a genuinely new slot (new
-                    # slots are always numbered by the system, never by the model).
-                    if foreign_slot_keys.get(s_num) == s_key:
-                        continue
-                    s_num = ""
-
-                if existing_slot:
-                    proposal_key = f"existing:{existing_slot.slot_id}"
-                    slot_label = existing_slot.slot_number
-                elif s_key:
-                    proposal_key = f"new-key:{s_key}"
-                    slot_label = s_key
-                else:
-                    raise LLMOutputError(
-                        f"Slot proposal #{item_index} must reference an existing slot_number or provide a non-empty slot_key"
-                    )
-
-                if proposal_key in seen_proposal_keys:
-                    duplicate_slots.add(slot_label)
-                seen_proposal_keys.add(proposal_key)
-                proposals.append(
-                    {
-                        "slot_number": s_num,
-                        "slot_key": s_key,
-                        "existing_slot": existing_slot,
-                        "value": val,
-                        "operation": proposed_op,
-                    }
-                )
-
-            if not duplicate_slots:
                 break
-            if attempt == 1:
-                raise LLMOutputError(
-                    "SlotFiller returned multiple proposals for the same slot after retry: "
-                    + ", ".join(sorted(duplicate_slots))
-                )
 
-            correction_prompt = (
-                f"{prompt}\n\n# CORRECTION REQUIRED\n"
-                "Your previous output contained multiple proposals for the same slot(s): "
-                f"{', '.join(sorted(duplicate_slots))}. Return a corrected JSON array with exactly one proposal "
-                "per slot. Semantically combine all compatible grounded facts for each slot; do not discard facts "
-                "and do not treat earlier output items as state updates.\n"
-                f"Previous invalid output:\n{json.dumps(raw_result, ensure_ascii=False)}"
-            )
-            raw_result = await self.llm_client.complete_json(
-                prompt=correction_prompt,
-                turn_id=user_turn_id,
-                module="SlotFiller",
-                prompt_name="slots_filling",
-            )
+            except LLMOutputError as err:
+                if attempt == 1:
+                    raise
+                if duplicate_slots:
+                    correction_prompt = (
+                        f"{prompt}\n\n# CORRECTION REQUIRED\n"
+                        "Your previous output contained multiple proposals for the same slot(s): "
+                        f"{', '.join(sorted(duplicate_slots))}. Return a corrected JSON array with exactly one proposal "
+                        "per slot. Semantically combine all compatible grounded facts for each slot; do not discard facts "
+                        "and do not treat earlier output items as state updates.\n"
+                        f"Previous invalid output:\n{json.dumps(raw_result, ensure_ascii=False)}"
+                    )
+                else:
+                    correction_prompt = (
+                        f"{prompt}\n\n# CORRECTION REQUIRED\n"
+                        f"Your previous output violated the slot proposal contract:\n{str(err)}\n\n"
+                        "Contract rules:\n"
+                        "- If targeting an existing slot (even if state is 'empty'): reuse its exact slot_number and slot_key. Use operation 'update' to populate an empty slot, 'refine' to add details, or 'mark_uncertain'/'conflict'. NEVER use operation 'add' with an existing slot_number!\n"
+                        "- If introducing a genuinely new business attribute not in current slots: operation MUST be 'add', and 'slot_number' MUST be null.\n"
+                        "- Return a corrected JSON array complying strictly with the contract. Do not discard facts.\n"
+                        f"Previous invalid output:\n{json.dumps(raw_result, ensure_ascii=False)}"
+                    )
+                raw_result = await self.llm_client.complete_json(
+                    prompt=correction_prompt,
+                    turn_id=user_turn_id,
+                    module="SlotFiller",
+                    prompt_name="slots_filling",
+                )
 
         events: list[StateEvent] = []
         for proposal in proposals:

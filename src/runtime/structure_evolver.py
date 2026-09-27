@@ -308,7 +308,7 @@ class StructureEvolver:
             elif resolution.action == "create":
                 target_sec_id = next((s.section_id for s in state.sections if s.section_id == "section_emergent"), None)
                 if target_sec_id is None:
-                    raise LLMOutputError("Cannot create an emergent topic because the scaffold has no 'section_emergent'")
+                    raise LLMOutputError("Cannot create an emergent topic because the framework has no 'section_emergent'")
 
                 new_top_num = f"topic-emergent-{len(all_topics) + 1}"
                 new_top_id = IdFactory.create_topic_id(new_top_num)

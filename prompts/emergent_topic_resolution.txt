@@ -1,4 +1,4 @@
-# ROLE: Requirements Structure Evolution & Topic De-duplication Arbiter.
+# ROLE: Requirements Structure Evolution and Topic De-duplication Arbiter.
 # TASK: Evaluate a newly emerged candidate topic against the existing topic catalog, analyze semantic overlap and modular independence, and render a definitive structural evolution adjudication: create a new independent topic (`create`), merge into an existing topic (`merge`), or ignore (`ignore`).
 
 # INPUT:
@@ -6,10 +6,10 @@
   - Candidate Title: {candidate_title}
   - Candidate Description: {candidate_description}
   - Candidate Slots: {candidate_slots}
-- Existing Topics & Slot Catalog As [existing_topics]:
+- Existing Topics and Slot Catalog As [existing_topics]:
 {existing_topics_json}
 
-# ADJUDICATION ACTIONS & CRITERIA:
+# ADJUDICATION ACTIONS and CRITERIA:
 1. `create`: The candidate represents a substantially distinct, high-value business domain uncovered by all existing topics that warrants dedicated interview exploration.
    - reason_code: Must be "distinct_concern"
    - target_topic_number: Must be null
@@ -20,7 +20,7 @@
    - reason_code: Choose "insufficient_evidence" or "out_of_scope"
    - target_topic_number: Must be null
 
-# STRICT RULES & GUARDRAILS:
+# STRICT RULES AND GUARDRAILS:
 1. Compact Catalog Bias: If the candidate can be represented as a refined slot or attribute under an existing topic, prioritize `merge` to prevent catalog fragmentation and interview sprawl.
 2. Parameter Consistency:
    - When action is "create" or "ignore", target_topic_number MUST be null.

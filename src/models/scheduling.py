@@ -38,6 +38,7 @@ class TopicSchedulingView(BaseModel):
     recent_emergence: float = 0.0
     continuity: float = 0.0
     user_relevance: float = 0.0
+    has_inquiry_targets: bool
 
 
 class TopicScore(BaseModel):

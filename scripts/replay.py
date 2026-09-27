@@ -63,7 +63,7 @@ async def replay_llm(project_id: str, store: ProjectStore, config: AppConfig):
     print(f"Total Recorded LLM Calls: {len(calls)}")
     print(f"Total Recorded Turns: {len(turns)}")
 
-    # Initialize interview pipeline and initial scaffold
+    # Initialize interview pipeline and initial framework
     await replay_pipeline.initialize()
 
     # Replay conversation turns using recorded interviewee inputs

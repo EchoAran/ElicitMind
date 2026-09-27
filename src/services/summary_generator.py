@@ -29,7 +29,7 @@ class SummaryGenerator:
         seed_topics = [t for t in all_topics if t.origin == "initial"]
         emergent_topics = [t for t in all_topics if t.origin == "added"]
 
-        lines.append("## 2. Topic Scaffold & Verification Status")
+        lines.append("## 2. Topic Framework & Verification Status")
         lines.append("| No. | Topic Number | Section | Topic Title & Scope | Source | Status | Slots Count |")
         lines.append("|---|---|---|---|---|---|---|")
         for idx, top in enumerate(all_topics, start=1):
@@ -77,8 +77,9 @@ class SummaryGenerator:
                         ev_strs.append(f"`{eid}`")
                 ev_display = "<br>".join(ev_strs) if ev_strs else "*(none)*"
 
+                state_display = f"{slot.state} (deferred)" if slot.deferred else slot.state
                 lines.append(
-                    f"| `{slot.slot_number}` | {slot.key} | {req_display} | `{slot.state}` | {val_display} | {ev_display} |"
+                    f"| `{slot.slot_number}` | {slot.key} | {req_display} | `{state_display}` | {val_display} | {ev_display} |"
                 )
             lines.append("")
 
@@ -106,6 +107,9 @@ class SummaryGenerator:
         uncertain_slots = [
             (t, s) for t in all_topics for s in t.slots if s.state == "uncertain"
         ]
+        deferred_slots = [
+            (t, s) for t in all_topics for s in t.slots if s.deferred
+        ]
         conflict_slots = [
             (t, s) for t in all_topics for s in t.slots if s.state == "conflict"
         ]
@@ -117,12 +121,23 @@ class SummaryGenerator:
         else:
             lines.append("- **Uncertain Slots**: None")
 
+        if deferred_slots:
+            lines.append("")
+            lines.append("### Deferred Slots Postponed for Later Elicitation:")
+            for t, s in deferred_slots:
+                val_repr = f"`{s.value}`" if s.value is not None else "*(empty)*"
+                lines.append(f"- Topic `{t.topic_number}` -> Slot `{s.slot_number}` ({s.key}): {val_repr} (State: `{s.state}`)")
+        else:
+            lines.append("")
+            lines.append("- **Deferred Slots**: None")
+
         if conflict_slots:
             lines.append("")
             lines.append("### Conflicting Slots Requiring Rule Reconciliation:")
             for t, s in conflict_slots:
                 lines.append(f"- Topic `{t.topic_number}` -> Slot `{s.slot_number}` ({s.key}): `{s.value}`")
         else:
+            lines.append("")
             lines.append("- **Conflicting Slots**: None")
 
         lines.append("")

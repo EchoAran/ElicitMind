@@ -19,8 +19,8 @@ STRATEGY_INSTRUCTIONS: dict[str, str] = {
     ),
     "deepen": (
         "Phase: Targeted Deepening Within Active Topic;\n"
-        "Core Objective: Clarify the specific missing nuance, tentative rule, or boundary condition for the designated target item without straying to other topics or slots;\n"
-        "Key Guidelines: Ground the question strictly in existing evidence, ask only about the single designated target item and clarification reason, and avoid repeating recently covered rules or boundaries."
+        "Core Objective: Advance the topic by exploring unaddressed conditions, exceptions, failure handling, or boundary limits related to established core facts, targeting the single designated target item;\n"
+        "Key Guidelines: Treat established facts as background context rather than asking whether they are true. Inquire forward into whether specific variations, conditions, or exception handling exist, without asserting that an exception or rule already exists. Ask ONE focused, open-ended question without repeating confirmed facts."
     ),
     "resolve_conflict": (
         "Phase: Conflict Resolution;\n"
@@ -57,6 +57,8 @@ class StrategySelector:
         forced_deepen_target: Optional[tuple[str, str]] = None,
         allow_explore: bool = True,
         explored_topic_ids: Optional[Set[str]] = None,
+        targeted_slot_ids: Optional[Set[str]] = None,
+        clarified_slot_ids: Optional[Set[str]] = None,
     ) -> QuestionPlan:
         """Determines the appropriate strategy and target slots based on state signals."""
         view = StateView(state, evidence_refs=evidence_refs)
@@ -94,7 +96,7 @@ class StrategySelector:
         if (
             allow_explore
             and (explored_topic_ids is None or topic_id not in explored_topic_ids)
-            and view.interview_evidence_count(topic_id) == 0
+            and (view.interview_evidence_count(topic_id) == 0 or len(view.get_filled_slots(topic_id)) == 0)
         ):
             return QuestionPlan(
                 strategy="explore",
@@ -102,9 +104,21 @@ class StrategySelector:
                 transition_from_topic_id=transition_from_topic_id,
             )
 
-        empty_req_slots = view.get_empty_required_slots(topic_id)
-        if empty_req_slots:
-            target_ids = [s.slot_id for s in empty_req_slots[:self.config.max_target_slots]]
+        unresolved_req_slots = view.get_unresolved_required_slots(topic_id)
+        # Distinguish factually unresolved slots from actionable slots currently worth asking
+        actionable_req_slots = [
+            s for s in unresolved_req_slots
+            if clarified_slot_ids is None or s.slot_id not in clarified_slot_ids
+        ]
+        if actionable_req_slots:
+            sorted_unresolved = sorted(
+                actionable_req_slots,
+                key=lambda s: (
+                    1 if (targeted_slot_ids and s.slot_id in targeted_slot_ids) else 0,
+                    0 if (s.value is None or str(s.value).strip() == "") else 1,
+                ),
+            )
+            target_ids = [s.slot_id for s in sorted_unresolved[:self.config.max_target_slots]]
             return QuestionPlan(
                 strategy="fill_gap",
                 topic_id=topic_id,
@@ -112,7 +126,11 @@ class StrategySelector:
                 transition_from_topic_id=transition_from_topic_id,
             )
 
-        deepen_candidates = view.get_deepening_target_slots(topic_id)
+        deepen_candidates = view.get_deepening_target_slots(
+            topic_id,
+            targeted_slot_ids=targeted_slot_ids,
+            clarified_slot_ids=clarified_slot_ids,
+        )
         if deepen_candidates:
             selected = deepen_candidates[:self.config.max_target_slots]
             target_ids = [slot.slot_id for slot, _ in selected]
@@ -125,8 +143,22 @@ class StrategySelector:
                 transition_from_topic_id=transition_from_topic_id,
             )
 
-        return QuestionPlan(
-            strategy="verify",
-            topic_id=topic_id,
-            transition_from_topic_id=transition_from_topic_id,
+        is_completed = view.is_topic_completed(topic_id, targeted_slot_ids=targeted_slot_ids)
+        if is_completed:
+            is_explicit_user_revisit = (
+                intent_decision is not None
+                and intent_decision.intent in ("switch_existing_topic", "return_previous_topic")
+                and intent_decision.target_topic_id == topic_id
+            )
+            if is_explicit_user_revisit:
+                return QuestionPlan(
+                    strategy="explore",
+                    topic_id=topic_id,
+                    transition_from_topic_id=transition_from_topic_id,
+                )
+            raise RuntimeError(
+                f"Topic '{topic_id}' has satisfied all completion criteria and has no remaining question targets."
+            )
+        raise RuntimeError(
+            f"Topic '{topic_id}' has no valid inquiry targets but has not satisfied completion criteria."
         )

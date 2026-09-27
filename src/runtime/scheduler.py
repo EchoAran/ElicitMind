@@ -1,6 +1,7 @@
 import uuid
-from typing import Optional
+from typing import Optional, Set
 
+from models.event import EvidenceRef
 from models.scheduling import (
     SchedulerDecision,
     SchedulerWeights,
@@ -8,7 +9,6 @@ from models.scheduling import (
     TopicScore,
 )
 from models.state import ProjectState, TopicState
-from services.state_view import StateView
 
 
 class Scheduler:
@@ -24,11 +24,14 @@ class Scheduler:
         current_topic: Optional[TopicState],
         turn_id: str,
         recovery_topic_id: Optional[str] = None,
+        evidence_refs: Optional[list[EvidenceRef]] = None,
+        targeted_slot_ids: Optional[Set[str]] = None,
     ) -> Optional[SchedulerDecision]:
-        # Filter eligible candidates (Exclude Completed and UserInterrupted)
+        # Filter eligible candidates (Exclude Completed, UserInterrupted, and topics without inquiry targets)
         eligible_views = [
             v for v in scheduling_views
             if v.status in ("Ongoing", "Pending", "SystemInterrupted")
+            and v.has_inquiry_targets
         ]
 
         if not eligible_views:
@@ -77,7 +80,6 @@ class Scheduler:
             reverse=True,
         )
 
-        state_view = StateView(state)
         previous_topic_id = current_topic.topic_id if current_topic else None
 
         # Level 0: Honor active recovery plan to prevent premature topic switching on stalled slots
@@ -94,54 +96,7 @@ class Scheduler:
                     reason_codes=["recovery_plan_priority", "conversational_continuity"],
                 )
 
-        # Level 1: Maintain and verify current Ongoing topic when ready for verification
-        if current_topic and current_topic.topic_status == "Ongoing":
-            if any(v.topic_id == current_topic.topic_id for v in eligible_views):
-                if state_view.is_ready_for_verification(current_topic.topic_id):
-                    return SchedulerDecision(
-                        decision_id=f"dec_{uuid.uuid4().hex[:8]}",
-                        turn_id=turn_id,
-                        selected_topic_id=current_topic.topic_id,
-                        selected_topic_number=current_topic.topic_number,
-                        previous_topic_id=previous_topic_id,
-                        candidate_scores=candidate_scores,
-                        reason_codes=["topic_closure_verification", "conversational_continuity"],
-                    )
-
-        # Level 2: When no current ongoing topic is active, prioritize dependency-satisfied topics ready for verification
-        is_current_active_ongoing = (
-            current_topic is not None
-            and current_topic.topic_status == "Ongoing"
-            and any(v.topic_id == current_topic.topic_id for v in eligible_views)
-        )
-
-        if not is_current_active_ongoing:
-            ready_pending_views = [
-                v for v in eligible_views
-                if v.status in ("Pending", "SystemInterrupted")
-                and v.dependency_readiness >= 1.0
-                and state_view.is_ready_for_verification(v.topic_id)
-            ]
-            if ready_pending_views:
-                ready_pending_views.sort(
-                    key=lambda v: (
-                        v.initial_prior,
-                        -state.initial_order.index(v.topic_number) if v.topic_number in state.initial_order else -999,
-                    ),
-                    reverse=True,
-                )
-                selected_v = ready_pending_views[0]
-                return SchedulerDecision(
-                    decision_id=f"dec_{uuid.uuid4().hex[:8]}",
-                    turn_id=turn_id,
-                    selected_topic_id=selected_v.topic_id,
-                    selected_topic_number=selected_v.topic_number,
-                    previous_topic_id=previous_topic_id,
-                    candidate_scores=candidate_scores,
-                    reason_codes=["pending_ready_for_verification", "highest_initial_prior"],
-                )
-
-        # Level 3: Multi-factor utility scheduling among remaining topics needing exploration or gap-filling
+        # Multi-factor utility scheduling among eligible candidate topics
         best_candidate = candidate_scores[0]
         reason_codes: list[str] = []
         if best_candidate.factors.get("conflict_signal", 0.0) > 0.0:

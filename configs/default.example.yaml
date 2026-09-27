@@ -61,7 +61,7 @@ intent:
 # ------------------------------------------------------------------------------
 scheduler:
   weights:
-    # Prior weight derived from the initial scaffold and domain outline
+    # Prior weight derived from the initial framework and domain outline
     initial_prior: 0.15
 
     # Dependency readiness weight (higher score if all predecessor topics are completed)

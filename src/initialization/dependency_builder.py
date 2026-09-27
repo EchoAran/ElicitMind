@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from llm.client import LLMClient
 from llm.exceptions import LLMOutputError
@@ -90,7 +91,7 @@ class DependencyBuilder:
                 indeg[tgt] = indeg.get(tgt, 0) + 1
 
         dmax = max(indeg.values()) if (indeg and max(indeg.values()) > 0) else 1
-        unique_sections = sorted(list({d["section_number"] for d in topics_data}))
+        unique_sections = sorted(list({d["section_number"] for d in topics_data}), key=self._parse_section_index)
         sn_to_pos = {sn: (i + 1) for i, sn in enumerate(unique_sections)}
         total_sections = len(unique_sections)
 
@@ -110,7 +111,10 @@ class DependencyBuilder:
                 )
             )
 
-        ranked_sorted = sorted(ranked, key=lambda x: x.core, reverse=True)
+        ranked_sorted = sorted(
+            ranked,
+            key=lambda x: (-x.core, self._parse_topic_key(x.topic_number)),
+        )
         order = [item.topic_number for item in ranked_sorted]
 
         return PriorityResult(
@@ -118,3 +122,17 @@ class DependencyBuilder:
             order=order,
             ranked_items=ranked_sorted,
         )
+
+    @staticmethod
+    def _parse_section_index(sec_num: str) -> int:
+        match = re.match(r"^section-([1-9]\d*)$", sec_num)
+        if not match:
+            raise ValueError(f"Invalid section number format for ordering: '{sec_num}'")
+        return int(match.group(1))
+
+    @staticmethod
+    def _parse_topic_key(topic_number: str) -> tuple[int, int]:
+        match = re.match(r"^topic-([1-9]\d*)-([1-9]\d*)$", topic_number)
+        if not match:
+            raise ValueError(f"Invalid topic number format for ordering: '{topic_number}'")
+        return (int(match.group(1)), int(match.group(2)))

@@ -1,4 +1,4 @@
-# ROLE: Conversational Intent & Dialog Flow Control Analysis Specialist.
+# ROLE: Conversational Intent and Dialog Flow Control Analysis Specialist.
 # TASK: Analyze the interviewee's latest response along two ORTHOGONAL dimensions:
 # 1. Dialog Flow Control Intent: Determine whether the interviewee expressed an explicit meta-conversational control request (stop interview, refuse/skip topic, switch topic, return to previous topic, or standard response).
 # 2. Topic Verification Outcome: When the interviewer's previous question used the 'verify' strategy to summarize and confirm topic completeness, determine whether the interviewee accepted the summary, requested revisions, or gave an ambiguous response.
@@ -12,7 +12,7 @@
 - Topic Catalog As [topic_catalog]:
 {topic_catalog_json}
 
-# DIMENSION 1: INTENT CATEGORIES & DECISION LOGIC:
+# DIMENSION 1: INTENT CATEGORIES AND DECISION LOGIC:
 1. `stop_interview`: Interviewee explicitly states a desire to conclude or exit the entire interview session (e.g., "Let's wrap up here", "I want to end the session").
    - target_topic_number: null
 2. `refuse_current_topic`: Interviewee explicitly refuses to answer or requests to skip the active topic (e.g., "I don't know about this part, let's skip it", "I'd rather not discuss this").
@@ -35,7 +35,7 @@ If Previous Question Strategy is "verify":
 - `revisions_requested`: Interviewee points out corrections, missing requirements, caveats, or additional points that must be updated/added (e.g., "Actually we need to add dual approval", "One exception is guest users", "Mostly accurate, but temporary approval also requires an audit trail").
 - `ambiguous`: Interviewee gives a vague, evasive, or unclear response where acceptance cannot be reliably determined (e.g., "I guess so", "Maybe", "Let's leave it like this for now").
 
-# STRICT RULES & GUARDRAILS:
+# STRICT RULES AND GUARDRAILS:
 1. Orthogonality: Confirming a summary ("Everything looks solid, we are good to proceed") is `verification_outcome = "accepted"`, and `intent = "none"` (or `switch_existing_topic` if they explicitly name a target topic like "Looks good, let's move to reservation workflows"). DO NOT confuse topic confirmation with `refuse_current_topic`.
 2. Content Mention vs Meta-Control Boundary: If the interviewee mentions other functional modules in the course of describing business processes (e.g., "During reservation, the user's role permissions are checked"), but DOES NOT explicitly ask to navigate/skip/stop, you MUST classify intent as `none`.
 3. Confidence Calibration: Assign high confidence (confidence >= 0.80) ONLY when the control intention or verification outcome is explicit and unambiguous. For ambiguous phrasing, assign a lower confidence (0.40 to 0.65).
