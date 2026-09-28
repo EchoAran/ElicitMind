@@ -56,8 +56,26 @@ class TopicState(BaseModel):
         return None
 
     def find_slot_by_number(self, slot_number: str) -> Optional[SlotState]:
+        target = slot_number.strip().lower()
         for s in self.slots:
-            if s.slot_number == slot_number:
+            s_num = s.slot_number.strip().lower()
+            if s_num == target:
+                return s
+
+        target_core = target
+        if target.startswith("slot-"):
+            target_core = target[5:]
+        elif target.startswith("topic-"):
+            target_core = target[6:]
+
+        for s in self.slots:
+            s_num = s.slot_number.strip().lower()
+            s_core = s_num
+            if s_num.startswith("slot-"):
+                s_core = s_num[5:]
+            elif s_num.startswith("topic-"):
+                s_core = s_num[6:]
+            if s_core == target_core:
                 return s
         return None
 
@@ -116,4 +134,11 @@ class ProjectState(BaseModel):
         for s in self.get_all_slots():
             if s.slot_id == slot_id:
                 return s
+        return None
+
+    def find_slot_by_number(self, slot_number: str) -> Optional[SlotState]:
+        for t in self.get_all_topics():
+            found = t.find_slot_by_number(slot_number)
+            if found is not None:
+                return found
         return None

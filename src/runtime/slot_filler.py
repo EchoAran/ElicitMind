@@ -109,12 +109,6 @@ class SlotFiller:
             module="SlotFiller",
             prompt_name="slots_filling",
         )
-        foreign_slot_keys: dict[str, str] = {
-            s.slot_number: s.key
-            for t in state.get_all_topics()
-            if t.topic_id != target_topic.topic_id
-            for s in t.slots
-        }
 
         for attempt in range(2):
             try:
@@ -164,7 +158,12 @@ class SlotFiller:
                     if s_num:
                         existing_slot = target_topic.find_slot_by_number(s_num)
                         if not existing_slot:
-                            if foreign_slot_keys.get(s_num) == s_key:
+                            is_foreign = any(
+                                t.find_slot_by_number(s_num) is not None
+                                for t in state.get_all_topics()
+                                if t.topic_id != target_topic.topic_id
+                            )
+                            if is_foreign:
                                 continue
                             raise LLMOutputError(
                                 f"Slot proposal #{item_index} with operation '{proposed_op}' references non-existent slot_number '{s_num}'"
@@ -196,8 +195,15 @@ class SlotFiller:
                             proposal_key = f"existing:{existing_slot.slot_id}"
                             slot_label = existing_slot.slot_number
                         else:
-                            # Genuine new attribute
+                            # Genuine new attribute or foreign topic attribute
                             if proposed_op in ("update", "refine", "conflict"):
+                                is_foreign_key = any(
+                                    any(s.key.strip().lower() == s_key.strip().lower() for s in t.slots)
+                                    for t in state.get_all_topics()
+                                    if t.topic_id != target_topic.topic_id
+                                )
+                                if is_foreign_key:
+                                    continue
                                 raise LLMOutputError(
                                     f"Slot proposal #{item_index} with operation '{proposed_op}' cannot find existing slot '{s_key}' in target topic"
                                 )
@@ -279,7 +285,8 @@ class SlotFiller:
                 events.append(event)
             else:
                 created_count = len([e for e in events if e.event_type == "slot_created"])
-                s_num = f"{target_topic.topic_number}-dyn-{len(target_topic.slots) + created_count + 1}"
+                topic_suffix = target_topic.topic_number.removeprefix("topic-")
+                s_num = f"slot-{topic_suffix}-dyn-{len(target_topic.slots) + created_count + 1}"
 
                 # Emit slot_created event for genuine dynamic slot on target_topic
                 new_slot_id = IdFactory.create_slot_id(s_num)

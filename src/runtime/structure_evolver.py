@@ -283,7 +283,8 @@ class StructureEvolver:
                     )
                 for slot_name in candidate.suggested_slots:
                     if not any(s.key == slot_name for s in target_topic.slots):
-                        new_slot_num = f"{target_topic.topic_number}-dyn-{len(target_topic.slots) + 1}"
+                        topic_suffix = target_topic.topic_number.removeprefix("topic-")
+                        new_slot_num = f"slot-{topic_suffix}-dyn-{len(target_topic.slots) + 1}"
                         new_slot = SlotState(
                             slot_id=IdFactory.create_slot_id(new_slot_num),
                             topic_id=target_topic.topic_id,
