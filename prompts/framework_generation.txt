@@ -82,7 +82,7 @@ Use the following 10 reference sections and topics as an elicitation guide to ch
   - is_required: A boolean (true or false).
     - Set to true if the core scenario, primary workflow, or mandatory rule of this topic cannot be understood, executed, or verified without this information. Essential functional behavior, critical failure handling, or key operational constraints vital to this scenario must be marked required.
     - Set to false for supplementary exploratory slots, such as optional edge variations, secondary configuration details, or additional quality inquiries that enrich understanding but are not prerequisite to understanding the core scenario.
-    - Each topic MUST have at least one core required slot (is_required: true).
+    - Topic Baseline Anchor (MANDATORY): Each topic MUST have at least one core required slot (is_required: true). Even when an exploratory topic addresses supplementary constraints or quality attributes, mark its primary defining attribute or foundational baseline slot as is_required: true!
     - Within each topic, order non-required slots by inquiry priority.
 
 # STRICT RULES AND GUARDRAILS:
@@ -90,6 +90,7 @@ Use the following 10 reference sections and topics as an elicitation guide to ch
 2. Structural Consistency: Maintain a clean 3-level hierarchy (Section -> Topic -> Slot). Sibling elements at the same hierarchy level must avoid duplicate or overlapping concerns. Focus on distinct business responsibilities rather than forcing artificial completeness against the reference catalog.
 3. ID Formatting and Hierarchy Consistency: Use exact lowercase hyphenated numbering strictly ("section-X", "topic-X-Y", "slot-X-Y-Z"). Every topic must match its parent section prefix, and every slot must match its parent topic prefix. Each ID must be globally unique across the framework.
 4. Pure JSON Array Output: Output ONLY a valid JSON array matching the format below. Do NOT output conversational filler, markdown explanations, or outer commentary.
+5. Topic Required Anchor Slot: Every single topic MUST contain at least one required slot with "is_required": true. A topic is justified in the framework only if it defines a clear elicitation target; its core baseline attribute must be marked "is_required": true, while optional or edge variations can be "is_required": false. A topic where all slots are false is invalid and will be rejected as a contract violation.
 
 # OUTPUT FORMAT (Direct pure JSON array; structure illustrated with document printing example - do NOT copy example domain terms):
 [
