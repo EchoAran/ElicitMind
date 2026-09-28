@@ -207,28 +207,6 @@ class StructureEvolver:
 
         return new_topic, [topic_event] + slot_events
 
-    @staticmethod
-    def _would_create_cycle(dependencies: list[DependencyEdge], source: str, target: str) -> bool:
-        """Determines if adding an edge (source -> target) creates a directed cycle in the dependency graph."""
-        if source == target:
-            return True
-        adj: dict[str, list[str]] = {}
-        for edge in dependencies:
-            adj.setdefault(edge.source, []).append(edge.target)
-
-        queue = [target]
-        visited = set()
-        while queue:
-            curr = queue.pop(0)
-            if curr == source:
-                return True
-            if curr not in visited:
-                visited.add(curr)
-                for nxt in adj.get(curr, []):
-                    if nxt not in visited:
-                        queue.append(nxt)
-        return False
-
     async def evolve(
         self,
         state: ProjectState,
@@ -252,9 +230,9 @@ class StructureEvolver:
                 new_edge = DependencyEdge(source=src_t.topic_number, target=tgt_t.topic_number)
                 already_exists = any(e.source == new_edge.source and e.target == new_edge.target for e in state.dependencies)
                 if not already_exists:
-                    if self._would_create_cycle(state.dependencies, src_t.topic_number, tgt_t.topic_number):
+                    if src_t.topic_number == tgt_t.topic_number:
                         raise LLMOutputError(
-                            f"Dependency {src_t.topic_number} -> {tgt_t.topic_number} would create a directed cycle"
+                            f"Self-dependency is not allowed on topic {src_t.topic_number}"
                         )
                     dep_event = EventFactory.create_dependency_added_event(
                         source_topic_number=src_t.topic_number,

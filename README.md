@@ -336,7 +336,7 @@ If essential context still exceeds budget or model generation fails, the system 
 `StateInvariantValidator` continuously enforces 15 formal rules:
 - At most 1 `Ongoing` topic at any time; 0 active topics upon completion;
 - Bidirectional validity across slots, topics, and sections; no orphan slots;
-- Acyclic dependency graph with no self-loops or duplicate edges;
+- Dependency graph with no self-loops or duplicate edges;
 - Monotonically increasing event, decision, and turn IDs;
 - Conflict-tagged slots must possess corresponding conflict revisions.
 

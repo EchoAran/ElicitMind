@@ -1,5 +1,5 @@
 # ROLE: Requirements Engineering Business Logic and Dependency Analysis Specialist.
-# TASK: Analyze the logical prerequisites and business relationships across the provided topic list, identify essential prerequisite dependencies, and construct a minimal, directed acyclic graph (DAG) of direct dependencies to guide topological interview scheduling.
+# TASK: Analyze the logical prerequisites and business relationships across the provided topic list, identify essential prerequisite dependencies, and construct a minimal directed graph of direct dependencies to guide interview scheduling.
 
 # INPUT:
 - List of Topics As [topics]:
@@ -10,11 +10,11 @@
 ## Step 2: Determine direct prerequisite dependencies between topic pairs:
   - source: Prerequisite topic (must be explored and clarified FIRST before the downstream topic can be meaningfully conducted).
   - target: Dependent topic (its business rules, workflows, or validation directly depend on information established in the source topic).
-## Step 3: Prune the dependency graph to eliminate redundant transitive edges and guarantee acyclicity.
+## Step 3: Prune the dependency graph to eliminate redundant transitive edges.
 
 # STRICT RULES AND GUARDRAILS:
 1. Minimal Direct Prerequisite Only: Establish dependency edges ONLY when a genuine strong prerequisite relationship exists. Strictly prohibit redundant transitive edges (e.g., if A -> B and B -> C exist, do NOT add A -> C).
-2. Acyclicity and Self-Loop Prevention: Strictly prohibit cyclic dependencies (e.g., A -> B and B -> A) and self-loops (A -> A). If topics are modular and independent, return an empty array [].
+2. Self-Loop Prevention: Strictly prohibit self-loops (A -> A). If topics are modular and independent, return an empty array [].
 3. Exact Identifier Grounding: Strictly use exact topic_number identifiers (e.g., "topic-1-1") from the provided [topics] for both source and target. Do NOT fabricate topic IDs or use descriptive text as IDs.
 4. Pure JSON Array Output: Output ONLY a valid JSON array of dependency objects. Do NOT include markdown code blocks, conversational explanations, or extra commentary.
 

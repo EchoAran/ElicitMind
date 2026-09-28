@@ -178,33 +178,6 @@ class StateInvariantValidator:
                     errors.append(f"Rule 15 Violation: Duplicate message_id '{msg_id}'.")
                 seen_msgs.add(msg_id)
 
-        # 16. Dependency graph must be a DAG (no directed cycles)
-        adj: dict[str, list[str]] = {}
-        in_degree: dict[str, int] = {}
-        nodes: set[str] = set()
-        for dep in state.dependencies:
-            nodes.add(dep.source)
-            nodes.add(dep.target)
-            adj.setdefault(dep.source, []).append(dep.target)
-            in_degree[dep.target] = in_degree.get(dep.target, 0) + 1
-            in_degree.setdefault(dep.source, in_degree.get(dep.source, 0))
-
-        kahn_queue = [n for n in nodes if in_degree[n] == 0]
-        visited_nodes = 0
-        while kahn_queue:
-            curr = kahn_queue.pop(0)
-            visited_nodes += 1
-            for nxt in adj.get(curr, []):
-                in_degree[nxt] -= 1
-                if in_degree[nxt] == 0:
-                    kahn_queue.append(nxt)
-
-        if visited_nodes < len(nodes):
-            errors.append(
-                f"Rule 16 Violation: Dependency graph contains a directed cycle "
-                f"(total_nodes={len(nodes)}, acyclic_visited={visited_nodes})."
-            )
-
         # 17. Topic identities must be unique so that every reference resolves to exactly one topic
         if len(all_topic_ids) != len(all_topics):
             errors.append("Rule 17 Violation: Duplicate topic_id detected in project state.")
