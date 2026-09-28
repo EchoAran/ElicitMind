@@ -5,7 +5,7 @@
 - Initial User Requirements and Domain Background: Provided in the user input query.
 
 # REQUIREMENTS ENGINEERING REFERENCE DIMENSIONS (Section -> Topic):
-Use the following 10 reference sections and topics as an elicitation guide to check for potentially missing concerns. This is a discovery reference, NOT an output checklist to copy or mirror:
+The following 10 reference dimensions serve as a comprehensive elicitation discovery guide. Use them to check for relevant requirement concerns across the system lifecycle:
 1. Project Purpose and Context:
    - Business context motivating the project
    - Current problem or opportunity
@@ -66,31 +66,39 @@ Use the following 10 reference sections and topics as an elicitation guide to ch
    - Project risks
 
 # DECOMPOSITION STEPS:
-## Step 1: Analyze the initial requirements to extract core business goals, target user roles, business entities, and critical workflows.
-## Step 2: Consult the Reference Dimensions to identify relevant but unstated requirement concerns (such as exceptions, external interfaces, performance thresholds, operational constraints, acceptance criteria) that are pertinent to this specific project. Proactively establish exploratory Sections and Topics for pertinent dimensions even if they were not explicitly mentioned in the initial brief.
-## Step 3: Formulate project-tailored Sections (Section) representing high-level functional domains, lifecycle stages, or quality concerns:
-  - Sequence sections in natural interview priority and logical flow, numbered sequentially as "section-1", "section-2", etc.
-  - section_content: Clearly summarize the domain area or lifecycle dimension. Adapt, merge, and contextualize concerns to the target system rather than copying generic reference titles mechanically.
-## Step 4: For each Section, formulate concrete Topics (Topic):
-  - Focus each topic on a specific business scenario, feature capability, boundary rule, or key quality concern.
+## Step 1: Requirements and Domain Baseline Analysis:
+  - Analyze the initial user brief to identify core business objectives, key stakeholder roles, domain entities, and central workflows.
+
+## Step 2: Multi-Dimensional Evaluation and Section Formulation:
+  - Consult the Reference Dimensions to identify applicable functional, operational, technical, and quality concerns pertinent to this specific project.
+  - Establish dedicated Sections for distinct concern areas that are relevant or exploratory for the target system (e.g., business data/interfaces, operational constraints, system protection, or delivery/validation). Avoid overly aggressive pruning or prematurely collapsing distinct concerns into an overly compressed set of generic sections.
+  - Section-level pruning should be balanced: Omit a reference dimension only when it is genuinely inapplicable or irrelevant to the project domain. There is NO need to artificially force all 10 dimensions if certain dimensions have no meaningful role in the project.
+  - Number Sections sequentially as "section-1", "section-2", etc., arranged in a logical interview flow from business purpose and functional scope to technical, operational, and delivery concerns.
+  - section_content: Clearly articulate the domain area or lifecycle concern using domain-tailored language for the target system.
+
+## Step 3: Topic Specialization:
+  - For each Section, formulate concrete Topics representing distinct scenarios, capabilities, operational rules, or boundary investigations.
   - Number topics sequentially under their parent section matching "topic-X-Y" where X is the parent section index and Y is the topic index (for example, "topic-1-1", "topic-1-2").
-  - topic_content: Clearly define the specific scenario, workflow, or technical concern to explore during the interview.
-## Step 5: For each Topic, design specific Information Slots (Slot):
-  - Slots represent concrete attributes, decision points, boundary conditions, or operational rules to elicit from the interviewee.
+  - Apply selective topic-level tailoring: Select and detail relevant subtopics that genuinely apply to the project's operational reality, omitting specific subtopics that have no bearing on the domain.
+  - topic_content: Clearly define the specific scenario, workflow, or technical boundary to explore during the interview.
+
+## Step 4: Slot Design and Required Baseline Anchors:
+  - For each Topic, design specific Information Slots (Slot) representing concrete attributes, decision points, boundary conditions, or operational rules to elicit from the interviewee.
   - Number slots sequentially under their parent topic matching "slot-X-Y-Z" where X and Y match the parent topic indices and Z is the slot index (for example, "slot-1-1-1", "slot-1-1-2").
   - slot_key: Accurate and concise name of the requirement attribute or operational boundary. Name concrete business attributes of the target domain; never name generic requirements meta-concepts.
   - is_required: A boolean (true or false).
-    - Set to true if the core scenario, primary workflow, or mandatory rule of this topic cannot be understood, executed, or verified without this information. Essential functional behavior, critical failure handling, or key operational constraints vital to this scenario must be marked required.
-    - Set to false for supplementary exploratory slots, such as optional edge variations, secondary configuration details, or additional quality inquiries that enrich understanding but are not prerequisite to understanding the core scenario.
-    - Topic Baseline Anchor (MANDATORY): Each topic MUST have at least one core required slot (is_required: true). Even when an exploratory topic addresses supplementary constraints or quality attributes, mark its primary defining attribute or foundational baseline slot as is_required: true!
+    - Set to true for the baseline attribute or core decision indispensable to defining that topic's scenario.
+    - Set to false for supplementary exploratory slots, such as optional edge variations, secondary configuration details, or additional quality inquiries that enrich understanding.
+    - Topic Baseline Anchor (MANDATORY): Every topic MUST contain at least one required slot (is_required: true) establishing its baseline definition. Even for exploratory or quality topics, designate its primary defining attribute as is_required: true!
     - Within each topic, order non-required slots by inquiry priority.
 
 # STRICT RULES AND GUARDRAILS:
-1. Grounding vs Elicitation Targets: Distinguish between established facts and elicitation inquiries. The initial requirements provided by the user are an initial entry point, not an exhaustive boundary. Dimensions not explicitly stated in the initial brief may be established as exploratory Sections, Topics, and Slots ONLY when genuinely pertinent to the specific project's operational environment and lifecycle; do NOT copy irrelevant dimensions mechanically as a checklist. Elicitation targets MUST NOT be asserted as already-confirmed facts or verified rules.
-2. Structural Consistency: Maintain a clean 3-level hierarchy (Section -> Topic -> Slot). Sibling elements at the same hierarchy level must avoid duplicate or overlapping concerns. Focus on distinct business responsibilities rather than forcing artificial completeness against the reference catalog.
-3. ID Formatting and Hierarchy Consistency: Use exact lowercase hyphenated numbering strictly ("section-X", "topic-X-Y", "slot-X-Y-Z"). Every topic must match its parent section prefix, and every slot must match its parent topic prefix. Each ID must be globally unique across the framework.
-4. Pure JSON Array Output: Output ONLY a valid JSON array matching the format below. Do NOT output conversational filler, markdown explanations, or outer commentary.
-5. Topic Required Anchor Slot: Every single topic MUST contain at least one required slot with "is_required": true. A topic is justified in the framework only if it defines a clear elicitation target; its core baseline attribute must be marked "is_required": true, while optional or edge variations can be "is_required": false. A topic where all slots are false is invalid and will be rejected as a contract violation.
+1. Balanced Structural Coverage: Provide thorough elicitation coverage across the project's pertinent requirements dimensions. Avoid overly aggressive section pruning or over-merging that collapses distinct business or technical areas into too few sections. Select and establish dedicated Sections for all dimensions that are meaningfully applicable or exploratory for the system, without forcing irrelevant dimensions artificially.
+2. Domain Contextualization: Formulate every Section, Topic, and Slot using concrete domain terminology of the target system rather than copying generic catalog labels mechanically.
+3. Clean 3-Level Hierarchy: Strictly maintain Section -> Topic -> Slot. Sibling elements at each level must represent distinct responsibilities without redundant overlapping.
+4. ID Formatting and Hierarchy Consistency: Use exact lowercase hyphenated numbering strictly ("section-X", "topic-X-Y", "slot-X-Y-Z"). Every topic must match its parent section prefix, and every slot must match its parent topic prefix. Each ID must be globally unique across the framework.
+5. Topic Required Anchor Slot: Every single topic MUST contain at least one required slot with "is_required": true. A topic is justified in the framework only if it defines a clear elicitation target with a mandatory core attribute; topics with all false slots violate the contract and will be rejected.
+6. Pure JSON Array Output: Output ONLY a valid JSON array matching the format below. Do NOT output conversational filler, markdown explanations, or outer commentary.
 
 # OUTPUT FORMAT (Direct pure JSON array; structure illustrated with document printing example - do NOT copy example domain terms):
 [
