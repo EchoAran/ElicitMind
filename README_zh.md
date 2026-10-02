@@ -1,17 +1,19 @@
-# Elicitation Core (需求半结构化访谈核心机制引擎)
+# ElicitMind
 
 [English](README.md) | [中文说明](README_zh.md)
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Elicitation Core** 是面向软件工程需求获取（Requirements Elicitation）的半结构化访谈核心机制引擎。系统旨在通过结构化证据链追踪、事件驱动的状态演化推演、多因素动态主题调度、策略驱动的问句生成以及严格的上下文预算与容灾回退机制，为大语言模型驱动的需求访谈提供高可靠、可溯源、可复现的工业级核心底座。
+**ElicitMind** 是基于持续演化的需求认识组织后续探索的自适应需求访谈方法。它显式维护已获得的需求内容、未决信息及来源，利用当前需求认识确定后续主题与提问策略，并根据每轮回答共同更新需求内容与访谈框架。
+
+论文标题：*ElicitMind: Adaptive Requirements Interviewing through Evolving Requirement Understanding*。匿名仓库：[方法实现](https://anonymous.4open.science/r/ElicitMind)与[实验复现包](https://anonymous.4open.science/r/ElicitMind-Experiment)。
 
 ---
 
 ## 目录
 
-- [1. 核心特性与设计哲学](#1-核心特性与设计哲学)
+- [1. 核心方法](#1-核心方法)
 - [2. 系统架构与工作流](#2-系统架构与工作流)
 - [3. 模块架构与目录说明](#3-模块架构与目录说明)
 - [4. 运行产物与存储规范](#4-运行产物与存储规范)
@@ -21,70 +23,52 @@
 - [6. 核心机制详解](#6-核心机制详解)
   - [6.1 事件溯源与两阶段事务归约](#61-事件溯源与两阶段事务归约)
   - [6.2 七因子动态调度器](#62-七因子动态调度器)
-  - [6.3 六维提问策略与 Prompt 隔离](#63-六维提问策略与-prompt-隔离)
+  - [6.3 提问策略与 Prompt 隔离](#63-提问策略与-prompt-隔离)
   - [6.4 上下文预算管理与明确失败暴露](#64-上下文预算管理与明确失败暴露)
   - [6.5 不变量门禁与中断幂等恢复](#65-不变量门禁与中断幂等恢复)
 - [开源协议](#开源协议)
 
 ---
 
-## 1. 核心特性与设计哲学
+## 1. 核心方法
 
-传统基于大模型的访谈系统容易面临**事实幻觉**、**话题发散偏航**、**长上下文爆炸**、**需求矛盾无法化解**以及**会话中断不可恢复**等严峻挑战。Elicitation Core 确立了如下核心设计准则：
+- **项目适配初始化。** 以 Volere、IREB 和 ISO/IEC/IEEE 29148 等通用需求工程最佳实践为基础，形成与项目相关的 Section–Topic–Slot 访谈框架，预填已有依据支持的信息，并识别主题依赖。项目适配使后续探索围绕目标系统的相关关注点展开，主题依赖作为调度优先级的软信号。
+- **自适应访谈规划。** 主题调度兼顾未决信息、新方向与交流连续性；候选槽位与访谈策略共同形成提问计划。策略选择使提问方式与当前需要相匹配，例如探索新主题、补充缺失信息、澄清暂定内容或处理冲突。
+- **回答驱动的演化。** 每轮回答更新需求内容及来源；新信息可以引起主题与槽位的增补或调整。随后重新判断访谈进展，使已解决的问题与新出现的探索目标共同参与后续规划。
+- **可追溯的需求认识。** 显式维护槽位内容、认识状态及证据。暂缓标记记录受访者推迟讨论某项内容的意图，与内容本身的认识状态分开维护。
 
-- 🎯 **不可变事件溯源（Event Sourcing）**：所有业务状态变更（槽位创建/填充/冲突修订、主题状态流转、依赖建立等）均由原子状态事件（`StateEvent`）驱动。通过纯函数 `StateReducer` 进行推演，支持从零事件流 100% 确定性回放与状态重建。
-- 🔗 **全流程结构化证据链（Evidence Traceability）**：受访者的每次有效陈述均转换为不可变的证据引用（`EvidenceRef`），槽位版本（`SlotRevision`）严格关联支撑证据，确保导出的每条需求事实均有据可查。
-- 🧭 **意图控制与多因素动态调度（Intent & 7-Factor Scheduling）**：支持受访者主动拒绝、切换话题或提前结项；结合初始先验、依赖就绪度、缺口率、冲突信号、话题涌现度、上下文连续性与用户关联度进行全局最优化主题调度。
-- 💡 **五维运行时策略规划（Strategy-guided Elicitation）**：解耦“聊什么”（调度目标）与“怎么问”（提问策略），针对探索、填空、深挖、化解冲突与意图核验等五大运行时情境实施针对性提问规划。
-- 🛡️ **严格上下文预算与明确失败暴露（Budgeting & Failure Exposure）**：13 隔离区块结构化 Prompt 契约，结合 P7~P4 优先级梯度载荷裁剪。在模型调用异常、输出为空或预算超限时，立即停止推进并暴露错误，不使用 fallback 掩盖错误，不污染未完成轮次状态。
-- 🔒 **15 项全局状态不变量（State Invariant Guardrails）**：建立强类型业务门禁，杜绝孤儿槽位、跨主题数据泄漏、多活动主题等非法状态。
+运行时还提供状态事件持久化、上下文预算管理和会话恢复。具体实现与参数配置见后文。
 
 ---
 
 ## 2. 系统架构与工作流
 
-整个访谈生命周期由 `ElicitationPipeline` 统一编排，包含 **初始化（Initialize）**、**逐轮推进（Step Loop）** 与 **结项归档（Finish）** 三大阶段：
+概念流程包括项目适配初始化、自适应访谈规划与回答驱动的演化，由 `ElicitationPipeline` 组织执行。第 6 节进一步说明对应的实现机制。
 
 ```mermaid
 flowchart TD
-    A[用户原始需求 / 初始描述] -->|Pipeline.initialize| B[初始框架生成 FrameworkGenerator]
-    B --> C[初始槽位预填 ProjectPrefiller]
-    C --> D[依赖关系构建 DependencyBuilder]
-    D --> E[(基线状态 state.initial.json)]
-
-    E --> F[生成首轮探索提问]
-    F --> G[受访者输入回答 interviewee_text]
-
-    subgraph "逐轮推进闭环 (Pipeline.step)"
-        G --> H[记录对话轮次 & 生成 EvidenceRef]
-        H --> I[意图识别 IntentController]
-        I --> J[证据解释 EvidenceInterpreter]
-        J --> K[槽位填充/冲突修订 SlotFiller]
-        J --> L[结构演化/新主题/合并/依赖 StructureEvolver]
-        K & L --> M[两阶段事务状态归约 StateReducer]
-        M --> N{用户意图接管?}
-        N -- 是 --> O[执行显式控制分支]
-        N -- 否 --> P[七因子动态调度器 Scheduler]
-        O & P --> Q[策略规划器 StrategySelector]
-        Q --> R[上下文构建 QuestionContextBuilder]
-        R --> S[预算管理 ContextBudgetManager]
-        S --> T[隔离提问生成 QuestionGenerator]
-        T -->|正常| V[大模型推理提问]
-        V --> W[全局不变量门禁核验 StateInvariantValidator]
-    end
-
-    W -->|下一轮| G
-    W -->|访谈完成/终止| X[等待用户显式结项]
-    X -->|scripts/finish.py 调用 Pipeline.finish| Y[(最终状态 final_state.json)]
-    X -->|scripts/finish.py 调用 Pipeline.finish| Z[生成需求规格说明 summary.md]
+    I[项目初始描述] --> A(项目适配初始化)
+    A --> U[当前需求认识]
+    U --> B(自适应访谈规划)
+    H[对话历史与受访者意图] --> B
+    B --> P[提问计划：主题、目标槽位与策略]
+    P --> G(生成问题)
+    G --> Q[访谈问题]
+    Q --> R[受访者回答]
+    R --> C(更新需求内容与框架，重新判断进展)
+    C --> D{继续访谈？}
+    D -- 是 --> U
+    D -- 否 --> F(结束访谈)
 ```
+
+独立 CLI 通过 `scripts/finish.py` 归档已经完成的项目。达到 `runtime.max_turns` 时停止执行，项目仍保持未完成状态。实验复现包的下游评价依据初始描述与完整对话，统一转换为 SRS。
 
 ---
 
 ## 3. 模块架构与目录说明
 
 ```text
-semi_structured_interview_fse/
+ElicitMind/
 ├── configs/
 │   ├── default.example.yaml            # 全量配置项模板与默认值参考 (可复制使用)
 │   └── default.yaml                    # 运行时配置文件
@@ -126,7 +110,7 @@ semi_structured_interview_fse/
 │   │   ├── state_view.py           # 只读状态视图与多因子指标提取
 │   │   ├── question_context_builder.py # 提问目标上下文与结构化输入装配
 │   │   ├── context_budget_manager.py   # 上下文 Token 预算测算与确定性梯度裁剪
-│   │   ├── validators.py           # 15 项全局状态不变量检验门禁
+│   │   ├── validators.py           # 状态与引用一致性检查
 │   │   └── summary_generator.py    # 结项 Markdown 需求规格生成器
 │   ├── initialization/             # 初始化子域
 │   │   ├── framework_generator.py  # 大纲与章节结构初始化
@@ -138,7 +122,7 @@ semi_structured_interview_fse/
 │       ├── slot_filler.py          # 槽位抽取、更新与冲突标记
 │       ├── intent_controller.py    # 用户交互意图识别与置信度门禁
 │       ├── scheduler.py            # 七因子效用评分动态调度器
-│       ├── strategy_selector.py    # 六维提问策略规划器
+│       ├── strategy_selector.py    # 访谈策略规划器
 │       └── question_generator.py   # 结构化 Prompt 组装与问句生成
 ├── scripts/                            # 核心 CLI 交互工具
 │   ├── init_project.py                 # 初始化访谈项目
@@ -181,8 +165,8 @@ semi_structured_interview_fse/
 
 ```bash
 # 克隆代码仓库并进入根目录
-git clone <repo_url>
-cd semi_structured_interview_fse
+git clone <repo_url> ElicitMind
+cd ElicitMind
 
 # 创建并激活虚拟环境
 python -m venv venv
@@ -248,7 +232,7 @@ python scripts/step.py \
 ```
 
 #### 3. 手动结项并生成报告 (`finish.py`)
-当 `step.py` 已返回访谈结束结果后，由用户显式执行归档命令并生成报告：
+项目达到 `Completed` 后，可显式归档并生成报告。`max_turns_reached` 表示因轮数上限停止，项目仍未完成，不能通过 `finish.py` 结项：
 ```bash
 python scripts/finish.py --project-id <PROJECT_ID>
 ```
@@ -299,7 +283,7 @@ python scripts/replay.py --project-id <PROJECT_ID> --mode llm
 2. **Commit 提交阶段**：预执行完全通过后，才将变更就地（In-place）应用至当前主状态对象，并原子化追加写入 `state_events.jsonl`。
 
 ### 6.2 七因子动态调度器
-当用户没有强行指定跳转话题时，系统通过 `Scheduler` 对所有未完成主题进行多维效用计算：
+当受访者未明确指定主题转换时，`Scheduler` 结合当前需求认识，对尚未完成的主题进行优先级评分：
 
 $$\text{Score}(T) = w_1 \cdot \text{Prior} + w_2 \cdot \text{DepReadiness} + w_3 \cdot \text{UnresolvedGap} + w_4 \cdot \text{ConflictSignal} + w_5 \cdot \text{RecentEmergence} + w_6 \cdot \text{Continuity} + w_7 \cdot \text{UserRelevance}$$
 
@@ -317,11 +301,11 @@ $$\text{Score}(T) = w_1 \cdot \text{Prior} + w_2 \cdot \text{DepReadiness} + w_3
 2. `fill_gap`（缺口填补）：聚焦缺失访谈证据的未解决必填核心槽位进行定向追问；
 3. `deepen`（深度挖掘）：针对不确定槽位、动态新增槽位或未决细节槽位深入澄清异常与边界条件；
 4. `resolve_conflict`（冲突化解）：客观呈现已记录的矛盾点，引导受访者确认基准规则；
-5. `confirm_control`（意图核验）：受访者发出控制意图但置信度不足时，主动向用户发起确认。
+5. `confirm_control`（意图核验）：受访者发出控制意图但置信度不足时，向受访者确认其意图。
 
-*（注：主题完结完全由事实与访谈证据驱动——当所有必填核心槽位均获访谈证据且无冲突/深化目标时自动收束，无需经历人工摘要确认循环）*。
+每轮回答后重新判断主题是否完成。核心信息需有访谈证据支持，或有证据表明受访者明确暂缓讨论；完成判断同时考虑尚未处理的冲突、暂定信息与细化目标。
 
-Prompt 模板采用 **13 个严格语义区块隔离设计**，隔离系统指令、当前聚焦目标（TargetContext）、跨主题已知事实（Known Info）、历史对话上下文与输出约束，有效杜绝模型偏题与指令泄漏。
+Prompt 模板采用 **13 个语义区块**，分别组织系统指令、当前目标（TargetContext）、跨主题已知信息（Known Info）、历史对话上下文与输出约束。
 
 ### 6.4 上下文预算管理与明确失败暴露
 `ContextBudgetManager` 设定全局及单区块 Token 上限。当输入内容超限时，按照既定梯度实施确定性削减：
@@ -333,7 +317,7 @@ Prompt 模板采用 **13 个严格语义区块隔离设计**，隔离系统指�
 若核心关键上下文仍然超限，或遭遇 LLM 接口异常/超时/空输出，系统直接抛出明确异常，记录 `RunError` 审计日志，不向磁盘提交该轮的 Evidence、StateEvent、Decision、Interviewer Turn 或 `state.json`。挂起的 Interviewee Turn 可在调整预算配置后通过 resume 安全重试并继续推进。
 
 ### 6.5 不变量门禁与中断幂等恢复
-系统通过 `StateInvariantValidator` 实时检验 15 项核心业务不变量：
+`StateInvariantValidator` 检查状态与引用的一致性，包括：
 - 全局至多存在 1 个正在进行的主题（`Ongoing`），结项后无任何活动主题；
 - 所有槽位、章节引用必须双向有效且无孤儿；
 - 依赖图禁止自依赖（Self-loop）与重复边；

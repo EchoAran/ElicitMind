@@ -1,17 +1,19 @@
-# Elicitation Core
+# ElicitMind
 
 [English](README.md) | [中文说明](README_zh.md)
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Elicitation Core** is an enterprise-grade core engine designed for software engineering **Requirements Elicitation** through semi-structured interviews. Powered by Large Language Models (LLMs), the system combines structured evidence chain tracking, event-driven state evolution, multi-factor dynamic topic scheduling, strategy-guided question planning, deterministic context budgeting, and crash-resilient session recovery into a robust, traceable, and reproducible foundation.
+**ElicitMind** is an adaptive requirements interviewing method that maintains and evolves the current requirement understanding: elicited content, unresolved information, and supporting evidence. This understanding guides subsequent topics and question strategies, while each answer can update both requirement content and the interview framework.
+
+Paper: *ElicitMind: Adaptive Requirements Interviewing through Evolving Requirement Understanding*. Anonymous repositories: [method](https://anonymous.4open.science/r/ElicitMind) and [experiment artifact](https://anonymous.4open.science/r/ElicitMind-Experiment).
 
 ---
 
 ## Table of Contents
 
-- [1. Core Features & Design Philosophy](#1-core-features--design-philosophy)
+- [1. Core Method](#1-core-method)
 - [2. Architecture & Workflow](#2-architecture--workflow)
 - [3. Project Structure](#3-project-structure)
 - [4. Storage & Runtime Artifacts](#4-storage--runtime-artifacts)
@@ -21,70 +23,52 @@
 - [6. Deep Dive into Core Mechanisms](#6-deep-dive-into-core-mechanisms)
   - [6.1 Event Sourcing & Two-Phase Reducer](#61-event-sourcing--two-phase-reducer)
   - [6.2 Seven-Factor Dynamic Scheduler](#62-seven-factor-dynamic-scheduler)
-  - [6.3 Six-Dimension Strategy Planning & Isolated Prompting](#63-six-dimension-strategy-planning--isolated-prompting)
+  - [6.3 Strategy Planning & Isolated Prompting](#63-strategy-planning--isolated-prompting)
   - [6.4 Context Budgeting & Failure Exposure](#64-context-budgeting--failure-exposure)
   - [6.5 Invariant Guardrails & Mid-Turn Recovery](#65-invariant-guardrails--mid-turn-recovery)
 - [License](#license)
 
 ---
 
-## 1. Core Features & Design Philosophy
+## 1. Core Method
 
-Traditional LLM-based interview systems suffer from **factual hallucination**, **conversational topic drift**, **context window explosion**, **unresolved requirement contradictions**, and **irrecoverable session crashes**. Elicitation Core addresses these challenges via six foundational pillars:
+- **Project-adaptive initialization.** Starting from common requirements-engineering knowledge drawn from Volere, IREB, and ISO/IEC/IEEE 29148, ElicitMind builds a project-related Section–Topic–Slot framework, prefills supported information, and identifies topic dependencies. Project adaptation directs exploration toward concerns relevant to the target system. Topic dependencies contribute soft priority signals to scheduling.
+- **Adaptive interview planning.** Topic scheduling balances unresolved information, new directions, and conversational continuity. Candidate slots and the interview strategy together form a question plan. Strategy selection matches the question to the current need, such as exploring a new topic, filling a gap, clarifying tentative information, or resolving a conflict.
+- **Answer-driven evolution.** Each answer updates requirement content and its evidence. New information can add or reorganize topics and slots; progress is then reassessed so that subsequent planning reflects both newly resolved and newly opened questions.
+- **Traceable requirement understanding.** Slot content, content states, and evidence are maintained explicitly. Deferral records the interviewee's decision to postpone an item and is distinct from its content state.
 
-- 🎯 **Immutable Event Sourcing**: Every state transition (slot creation, refinement, conflict revision, topic lifecycle change, dependency addition) is modeled as a strongly typed atomic `StateEvent`. The pure-function `StateReducer` enables 100% deterministic state reconstruction from disk event logs.
-- 🔗 **Full-Lifecycle Evidence Traceability**: Interviewee statements are captured as immutable `EvidenceRef` records. All slot revisions (`SlotRevision`) explicitly reference supporting evidence, ensuring that every extracted requirement fact is fully auditable.
-- 🧭 **Intent Control & 7-Factor Scheduling**: Handles explicit user conversational control (topic switching, topic refusal, backtracking, early termination) with confidence thresholds; dynamically evaluates candidate topics across 7 factors (prior, readiness, gap, conflict, emergence, continuity, relevance) for optimal focus.
-- 💡 **Strategy-Guided Question Planning**: Decouples *what to discuss* (scheduler target) from *how to ask* (question strategy), planning targeted inquiries across five runtime strategies: `explore`, `fill_gap`, `deepen`, `resolve_conflict`, and `confirm_control`.
-- 🛡️ **Strict Context Budgeting & Failure Exposure**: Employs a 13-block isolated prompt contract with P7~P4 priority-based progressive context trimming. If budget is exceeded or model calls fail after retries, the engine immediately halts progression and exposes the error without masking failures or committing incomplete state.
-- 🔒 **15 State Invariant Guardrails**: Formal business validation rules eliminate orphan slots, cross-topic data leaks, invalid state transitions, and dangling dependencies.
+The runtime also provides persisted state events, context budgeting, and session recovery. Their implementation and configuration are described below.
 
 ---
 
 ## 2. Architecture & Workflow
 
-The interview lifecycle is orchestrated by `ElicitationPipeline`, encompassing **Initialization**, **Turn Step Loop**, and **Session Finalization**:
+The conceptual workflow follows project-adaptive initialization, adaptive interview planning, and answer-driven evolution. `ElicitationPipeline` coordinates these phases; the implementation details are described in Section 6.
 
 ```mermaid
 flowchart TD
-    A[Initial Requirement / Initial Description] -->|Pipeline.initialize| B[FrameworkGenerator]
-    B --> C[ProjectPrefiller]
-    C --> D[DependencyBuilder]
-    D --> E[(Baseline state.initial.json)]
-
-    E --> F[Generate Round 0 Question]
-    F --> G[Interviewee Response]
-
-    subgraph "Per-Turn Execution Loop (Pipeline.step)"
-        G --> H[Record Turn & Create EvidenceRef]
-        H --> I[IntentController]
-        I --> J[EvidenceInterpreter]
-        J --> K[SlotFiller: Extraction & Conflicts]
-        J --> L[StructureEvolver: Emergent Topics & Dependencies]
-        K & L --> M[Two-Phase StateReducer Transaction]
-        M --> N{Explicit User Intent Override?}
-        N -- Yes --> O[Execute Control Branch]
-        N -- No --> P[Seven-Factor Scheduler]
-        O & P --> Q[StrategySelector]
-        Q --> R[QuestionContextBuilder]
-        R --> S[ContextBudgetManager]
-        S --> T[QuestionGenerator: 13 Isolated Blocks]
-        T -->|Normal| V[LLM Inference]
-        V --> W[StateInvariantValidator Guardrails]
-    end
-
-    W -->|Next Turn| G
-    W -->|Session Complete / Terminated| X[Await explicit user finalization]
-    X -->|scripts/finish.py calls Pipeline.finish| Y[(Final final_state.json)]
-    X -->|scripts/finish.py calls Pipeline.finish| Z[Generate Requirements summary.md]
+    I[Initial project description] --> A(Project-adaptive initialization)
+    A --> U[Current requirement understanding]
+    U --> B(Adaptive interview planning)
+    H[Dialogue history and interviewee intent] --> B
+    B --> P[Question plan: topic, target slots, strategy]
+    P --> G(Generate question)
+    G --> Q[Interview question]
+    Q --> R[Interviewee answer]
+    R --> C(Update content and framework; reassess progress)
+    C --> D{Continue interview?}
+    D -- Yes --> U
+    D -- No --> F(End interview)
 ```
+
+The CLI archives completed projects through `scripts/finish.py`. Reaching `runtime.max_turns` stops execution with the project incomplete. Downstream evaluation in the experiment artifact converts the initial description and complete transcript to a common SRS format.
 
 ---
 
 ## 3. Project Structure
 
 ```text
-semi_structured_interview_fse/
+ElicitMind/
 ├── configs/
 │   ├── default.example.yaml            # Canonical configuration template with full inline docs
 │   └── default.yaml                    # Active local configuration file
@@ -126,7 +110,7 @@ semi_structured_interview_fse/
 │   │   ├── state_view.py           # Read-only state view & multi-factor metrics extractor
 │   │   ├── question_context_builder.py # Question target context & payload assembly
 │   │   ├── context_budget_manager.py   # Token budget manager & progressive P7~P4 trimming
-│   │   ├── validators.py           # 15 Global state invariant validators
+│   │   ├── validators.py           # State invariant validation
 │   │   └── summary_generator.py    # Final Markdown requirements specification exporter
 │   ├── initialization/             # Initialization domain
 │   │   ├── framework_generator.py  # Outline & section generator
@@ -181,8 +165,8 @@ Python 3.10+ is required. We recommend using a virtual environment:
 
 ```bash
 # Clone the repository
-git clone <repo_url>
-cd semi_structured_interview_fse
+git clone <repo_url> ElicitMind
+cd ElicitMind
 
 # Create and activate virtual environment
 python -m venv venv
@@ -248,7 +232,7 @@ python scripts/step.py \
 ```
 
 #### 3. Finalize and Generate the Report (`finish.py`)
-After `step.py` reports that the interview has ended, explicitly archive the completed project and generate its report:
+After the project reaches `Completed`, explicitly archive it and generate its report. A `max_turns_reached` stop leaves the project incomplete and cannot be finalized with `finish.py`:
 ```bash
 python scripts/finish.py --project-id <PROJECT_ID>
 ```
@@ -319,9 +303,9 @@ $$\text{Score}(T) = w_1 \cdot \text{Prior} + w_2 \cdot \text{DepReadiness} + w_3
 4. `resolve_conflict`: Objectively highlights contradictory facts to establish ground truth;
 5. `confirm_control`: Seeks explicit confirmation when user control intent has borderline confidence.
 
-*(Note: Topic completion is strictly evidence-driven—a topic naturally completes when all required slots are satisfied with interview evidence, without artificial summary confirmation loops).*
+Topic completion is reassessed after each answer. Core information must be supported by interview evidence or explicitly deferred with evidence of that decision; unresolved conflicts, tentative information, and outstanding detail targets are considered in the completion check.
 
-Prompts use **13 strictly isolated semantic blocks**, preventing system instructions from leaking and stopping hallucinated cross-topic assumptions.
+Prompts organize instructions, target context, known information, dialogue history, and output constraints into **13 semantic blocks**.
 
 ### 6.4 Context Budgeting & Failure Exposure
 `ContextBudgetManager` applies a deterministic progressive trimming ladder (P7 ~ P4):
@@ -333,7 +317,7 @@ Prompts use **13 strictly isolated semantic blocks**, preventing system instruct
 If essential context still exceeds budget or model generation fails, the system immediately raises an exception and logs a structured `RunError` without committing Evidence, StateEvents, Decisions, Interviewer Turns, or `state.json`. The pending user turn remains safely resumable after adjusting configuration or environment parameters.
 
 ### 6.5 Invariant Guardrails & Mid-Turn Recovery
-`StateInvariantValidator` continuously enforces 15 formal rules:
+`StateInvariantValidator` checks state and reference consistency, including:
 - At most 1 `Ongoing` topic at any time; 0 active topics upon completion;
 - Bidirectional validity across slots, topics, and sections; no orphan slots;
 - Dependency graph with no self-loops or duplicate edges;
